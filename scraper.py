@@ -4,7 +4,6 @@ import os
 import re
 import ssl
 import time
-from datetime import datetime
 
 # --- Mac SSL Fix ---
 try:
@@ -20,11 +19,8 @@ FEEDS = {
     "NDR Podcast": "https://www.ndr.de/nachrichten/info/podcast2998.xml"
 }
 
-print("Starting the news scraper...")
-
-os.makedirs("articles", exist_ok=True)
-today_str = datetime.now().strftime("%Y-%m-%d")
-filename = f"articles/news_{today_str}.csv"
+# The SINGLE file where everything will be saved forever
+filename = "alle_artikel.csv"
 
 
 def clean_text(raw_html):
@@ -33,15 +29,34 @@ def clean_text(raw_html):
         return ""
     cleanr = re.compile('<.*?>')
     text = re.sub(cleanr, '', raw_html)
-    # Replace weird newlines and tabs with normal spaces
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
 
+# --- 1. SMART MEMORY: Read existing URLs to prevent duplicates ---
+existing_urls = set()
+file_exists = os.path.isfile(filename)
+
+if file_exists:
+    with open(filename, mode='r', encoding='utf-8') as file:
+        reader = csv.reader(file)
+        try:
+            next(reader)  # Skip the header row
+            for row in reader:
+                if len(row) > 3:
+                    existing_urls.add(row[3])  # The URL is in the 4th column (Index 3)
+        except StopIteration:
+            pass
+
+# --- 2. Scrape and Append ---
 try:
-    with open(filename, mode='w', newline='', encoding='utf-8') as file:
+    # Notice mode='a' (append). This adds to the bottom of the file!
+    with open(filename, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        writer.writerow(["Medium", "Datum", "Titel", "URL", "Inhalt", "Kurzkommentar"])
+
+        # Only write the header if the file is being created for the very first time
+        if not file_exists:
+            writer.writerow(["Medium", "Datum", "Titel", "URL", "Inhalt", "Kurzkommentar"])
 
         for source, url in FEEDS.items():
             print(f"Downloading news from {source}...")
@@ -53,28 +68,29 @@ try:
 
             saved_articles = 0
 
-            # We look at up to 40 articles to ensure we find 10 GOOD ones
-            for entry in parsed_feed.entries[:40]:
-                if saved_articles >= 10:
-                    break  # We have our 10 full articles, move to the next news source!
+            for entry in parsed_feed.entries:
+                # STOP IF WE ALREADY GOT 2 ARTICLES FOR THIS SOURCE
+                if saved_articles >= 2:
+                    break
 
                 title = entry.get("title", "Kein Titel")
                 link = entry.get("link", "")
 
-                # --- 1. Fix the Date Issue ---
+                # If we already have this article in our CSV, skip it!
+                if link in existing_urls:
+                    continue
+
+                # Get Date
                 date_str = ""
-                # Try to grab the parsed time and format it nicely (DD.MM.YYYY)
                 if "published_parsed" in entry and entry.published_parsed:
                     date_str = time.strftime("%d.%m.%Y", entry.published_parsed)
                 elif "updated_parsed" in entry and entry.updated_parsed:
                     date_str = time.strftime("%d.%m.%Y", entry.updated_parsed)
                 else:
-                    # Fallback if the parser fails
                     date_str = entry.get("published", entry.get("updated", "Kein Datum"))
 
-                # --- 2. Fix the Content Issue ---
+                # Get Content
                 content_raw = ""
-                # Check all the different ways RSS feeds hide their text
                 if "summary" in entry:
                     content_raw = entry.summary
                 elif "content" in entry and len(entry.content) > 0:
@@ -84,17 +100,18 @@ try:
 
                 content_clean = clean_text(content_raw)
 
-                # Skip articles that have no content (e.g. ORF Breaking News)
+                # Skip useless empty breaking news
                 if not content_clean or content_clean == "":
                     continue
 
-                # If it passed the checks, save it to the CSV!
+                # Save it to the CSV
                 writer.writerow([source, date_str, title, link, content_clean, ""])
+                existing_urls.add(link)  # Add to memory so we don't save it twice
                 saved_articles += 1
 
-            print(f"Successfully saved {saved_articles} full articles from {source}!")
+            print(f"Successfully added {saved_articles} NEW articles from {source}!")
 
-    print(f"\nSUCCESS! All done. Open {filename} to see your perfect CSV.")
+    print(f"\nSUCCESS! All done. Open {filename} to see your list.")
 
 except Exception as e:
     print(f"\nCRITICAL ERROR: Something went wrong!\nError Details: {e}")

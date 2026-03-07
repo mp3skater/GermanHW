@@ -2,42 +2,39 @@ name: Daily News Scraper
 
 on:
   schedule:
-    # Runs at 6:00 AM UTC every day
-    - cron: '0 6 * * *'
-  workflow_dispatch: # This line allows you to click a button to run it manually!
+    - cron: '0 6 * * *' # 6:00 AM UTC
+  workflow_dispatch:
 
 permissions:
-  contents: write # Gives the bot permission to save the CSV to your repo
+  contents: write
 
 jobs:
   scrape-news:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Check out your repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Setup Python environment
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. Install the feedparser library
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # 4. Run your python script
       - name: Run Scraper
         run: python scraper.py
 
-      # 5. Commit the new CSV file and push it to your repo
       - name: Commit and Push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
-          git add articles/
-          # The '|| exit 0' part prevents the action from crashing if no new news was found
-          git commit -m "Auto-added daily news for $(date +'%Y-%m-%d')" || exit 0
+          
+          # Add our single CSV file
+          git add alle_artikel.csv
+          
+          # Commit the changes (or exit peacefully if there were no new articles today)
+          git commit -m "Auto-updated alle_artikel.csv with new news" || exit 0
           git push
