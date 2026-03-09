@@ -69,8 +69,8 @@ try:
             saved_articles = 0
 
             for entry in parsed_feed.entries:
-                # STOP IF WE ALREADY GOT 2 ARTICLES FOR THIS SOURCE
-                if saved_articles >= 2:
+                # STOP IF WE ALREADY GOT 1 ARTICLES FOR THIS SOURCE
+                if saved_articles >= 1:
                     break
 
                 title = entry.get("title", "Kein Titel")
